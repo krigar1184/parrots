@@ -12,16 +12,32 @@ services:
     volumes:
       - ${PWD}/services/auth/:/usr/src/app/
     depends_on:
-      - db
-  tasks:
-    build: ./services/tasks
+      - postgres
+
+  tasks-web:
+    build:
+      context: ./services/tasks
+      dockerfile: Dockerfile-web
+    restart: unless-stopped
     ports:
       - "8001:8000"
     volumes:
       - ${PWD}/services/tasks/:/usr/src/app/
     depends_on:
-      - db
+      - postgres
       - kafka
+
+  tasks-consumer:
+    build: 
+      context: ./services/tasks
+      dockerfile: Dockerfile-consumer
+    restart: unless-stopped
+    volumes:
+      - ${PWD}/services/tasks/:/usr/src/app/
+    depends_on:
+      - postgres
+      - kafka
+
   postgres:
     user: postgres
     restart: always
@@ -33,6 +49,11 @@ services:
     volumes:
       - data:/var/lib/postgresql/data
       - ${PWD}/services/postgres/:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD", "psql", "-c", "select 1"]
+      interval: 5s
+      timeout: 1m
+      retries: 3
 
   zookeeper:
     image: bitnami/zookeeper
@@ -53,6 +74,11 @@ services:
       KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: yes
     ports:
       - "9092:9092"
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server=kafka:9092", "zookeeper:2181"]
+      interval: 10s
+      timeout:  1m
+      retries: 5
 
     depends_on:
       - zookeeper

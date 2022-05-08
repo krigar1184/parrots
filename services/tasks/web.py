@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Depends
 from fastapi.exceptions import HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from kafka import KafkaProducer
+# from kafka import KafkaProducer
+# from kafka.errors import KafkaError
+from aiokafka import AIOKafkaProducer
 from pydantic import BaseModel
 
 from tasks.models import tasks_table
@@ -19,6 +21,8 @@ class Task(BaseModel):
 
 app = FastAPI()
 
+producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='http://localhost:8000/token')
 
 
@@ -29,16 +33,12 @@ async def index(_ = Depends(oauth2_scheme)):
 
 @app.post('/tasks')
 async def create_task(payload: Task, _ = Depends(oauth2_scheme)):
-    producer = KafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS)
-
-    if not producer.bootstrap_connected():
-        raise HTTPException(401, 'cannot connect to broker')
+    await producer.start()
 
     try:
-        for i in range(100):
-            producer.send('tasks', f'pewpew{str(i)}'.encode())
+        await producer.send_and_wait('tasks-stream', value=payload.json().encode())
     finally:
-        producer.close()
+        await producer.stop()
 
     return payload.json()
 
