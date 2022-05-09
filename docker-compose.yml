@@ -1,0 +1,87 @@
+---
+version: '3.9'
+
+services:
+  auth:
+    environment:
+      LOG_LEVEL: DEBUG
+    build: 
+      context: ./services/auth
+    ports:
+      - "8000:8000"
+    volumes:
+      - ${PWD}/services/auth/:/usr/src/app/
+    depends_on:
+      - postgres
+
+  tasks-web:
+    build:
+      context: ./services/tasks
+      dockerfile: Dockerfile-web
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - ${PWD}/services/tasks/:/usr/src/app/
+    depends_on:
+      - postgres
+      - kafka
+
+  tasks-consumer:
+    build: 
+      context: ./services/tasks
+      dockerfile: Dockerfile-consumer
+    restart: unless-stopped
+    volumes:
+      - ${PWD}/services/tasks/:/usr/src/app/
+    depends_on:
+      - postgres
+      - kafka
+
+  postgres:
+    user: postgres
+    restart: always
+    image: postgres
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - data:/var/lib/postgresql/data
+      - ${PWD}/services/postgres/:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD", "psql", "-c", "select 1"]
+      interval: 5s
+      timeout: 1m
+      retries: 3
+
+  zookeeper:
+    image: bitnami/zookeeper
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: yes
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: bitnami/kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_CFG_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_TLS_CLIENT_AUTH: none
+      ALLOW_PLAINTEXT_LISTENER: yes
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: yes
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--list", "--bootstrap-server=kafka:9092", "zookeeper:2181"]
+      interval: 10s
+      timeout:  1m
+      retries: 5
+
+    depends_on:
+      - zookeeper
+
+volumes:
+  data:

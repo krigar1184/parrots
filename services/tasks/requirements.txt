@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+sqlalchemy
+databases[postgresql]
+asyncpg
+psycopg2
+kafka-python
+aiokafka
